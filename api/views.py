@@ -1,0 +1,469 @@
+import os
+import re
+import zipfile
+import time
+from io import BytesIO
+
+from dotenv import load_dotenv
+from google import genai
+
+from django.db.models import Count
+from django.db.models.functions import TruncDate
+
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import permission_classes
+
+from django.contrib.auth.models import User
+
+from .models import Analysis
+
+from django.http import HttpResponse
+
+from reportlab.platypus import (
+    SimpleDocTemplate,
+    Paragraph,
+    Spacer,
+)
+
+from reportlab.lib.styles import getSampleStyleSheet
+
+load_dotenv()
+
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+
+@api_view(["GET"])
+def health(request):
+    return Response(
+        {
+            "status": "ok",
+            "message": "Django AI Assistant is running",
+        }
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def history(request):
+    analyses = Analysis.objects.filter(user=request.user).order_by("-created_at")[:20]
+
+    return Response(
+        [
+            {
+                "id": analysis.id,
+                "prompt": analysis.prompt,
+                "response": analysis.response,
+                "favorite": analysis.favorite,
+            }
+            for analysis in analyses
+        ]
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def stats(request):
+    analyses = Analysis.objects.filter(user=request.user)
+
+    analyses_per_day = (
+        Analysis.objects.annotate(day=TruncDate("created_at"))
+        .values("day")
+        .annotate(total=Count("id"))
+        .order_by("day")
+    )
+
+    chart_data = [
+        {
+            "day": item["day"].strftime("%Y-%m-%d"),
+            "total": item["total"],
+        }
+        for item in analyses_per_day
+    ]
+
+    latest = analyses.order_by("-created_at").first()
+
+    analyses
+
+    score_history = [
+        {
+            "date": analysis.created_at.strftime("%Y-%m-%d"),
+            "architecture": analysis.architecture_score,
+            "security": analysis.security_score,
+            "performance": analysis.performance_score,
+            "production": analysis.production_score,
+            "response_time": analysis.response_time,
+        }
+        for analysis in analyses.order_by("created_at")
+    ]
+
+    total_count = analyses.count()
+
+    favorite_count = Analysis.objects.filter(favorite=True).count()
+
+    total_lines_analyzed = sum(a.lines_of_code or 0 for a in analyses)
+
+    avg_response_time = (
+        round(
+            sum(a.response_time or 0 for a in analyses) / total_count,
+            2,
+        )
+        if total_count
+        else 0
+    )
+
+    avg_architecture = (
+        round(
+            sum(a.architecture_score or 0 for a in analyses) / total_count,
+            1,
+        )
+        if total_count
+        else 0
+    )
+
+    avg_security = (
+        round(
+            sum(a.security_score or 0 for a in analyses) / total_count,
+            1,
+        )
+        if total_count
+        else 0
+    )
+
+    avg_performance = (
+        round(
+            sum(a.performance_score or 0 for a in analyses) / total_count,
+            1,
+        )
+        if total_count
+        else 0
+    )
+
+    avg_production = (
+        round(
+            sum(a.production_score or 0 for a in analyses) / total_count,
+            1,
+        )
+        if total_count
+        else 0
+    )
+
+    return Response(
+        {
+            "total_analyses": total_count,
+            "favorite_analyses": favorite_count,
+            "latest_analysis": (latest.created_at if latest else None),
+            "analyses_per_day": chart_data,
+            "average_scores": {
+                "architecture": avg_architecture,
+                "security": avg_security,
+                "performance": avg_performance,
+                "production": avg_production,
+            },
+            "score_history": score_history,
+            "total_lines_analyzed": total_lines_analyzed,
+            "avg_response_time": avg_response_time,
+        }
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def toggle_favorite(request, analysis_id):
+    try:
+        analysis = Analysis.objects.get(id=analysis_id, user=request.user)
+
+        analysis.favorite = not analysis.favorite
+        analysis.save()
+
+        return Response({"favorite": analysis.favorite})
+
+    except Analysis.DoesNotExist:
+        return Response(
+            {"error": "Analysis not found"},
+            status=404,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def export_pdf(request, analysis_id):
+
+    try:
+        analysis = Analysis.objects.get(id=analysis_id, user=request.user)
+
+        response = HttpResponse(content_type="application/pdf")
+
+        response["Content-Disposition"] = (
+            f'attachment; filename="analysis_{analysis.id}.pdf"'
+        )
+
+        doc = SimpleDocTemplate(response)
+
+        styles = getSampleStyleSheet()
+
+        content = []
+
+        content.append(
+            Paragraph(
+                "Django AI Analysis Report",
+                styles["Title"],
+            )
+        )
+
+        content.append(Spacer(1, 20))
+
+        content.append(
+            Paragraph(
+                f"Prompt: {analysis.prompt}",
+                styles["Heading2"],
+            )
+        )
+
+        content.append(Spacer(1, 10))
+
+        content.append(
+            Paragraph(
+                analysis.response.replace("\n", "<br/>"),
+                styles["BodyText"],
+            )
+        )
+
+        doc.build(content)
+
+        return response
+
+    except Analysis.DoesNotExist:
+
+        return Response(
+            {"error": "Analysis not found"},
+            status=404,
+        )
+
+
+@api_view(["POST"])
+def register(request):
+
+    username = request.data.get("username")
+    password = request.data.get("password")
+
+    if User.objects.filter(username=username).exists():
+        return Response(
+            {"error": "User already exists"},
+            status=400,
+        )
+
+    User.objects.create_user(
+        username=username,
+        password=password,
+    )
+
+    return Response({"success": True})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def me(request):
+
+    return Response(
+        {
+            "username": request.user.username,
+        }
+    )
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_analysis(request, analysis_id):
+    try:
+        analysis = Analysis.objects.get(id=analysis_id, user=request.user)
+        analysis.delete()
+
+        return Response({"success": True})
+
+    except Analysis.DoesNotExist:
+        return Response(
+            {"success": False, "error": "Analysis not found"},
+            status=404,
+        )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def chat(request):
+    message = request.data.get(
+        "message",
+        "",
+    ).strip()
+
+    uploaded_files = request.FILES.getlist("files")
+
+    all_files_content = ""
+
+    for uploaded_file in uploaded_files:
+        try:
+
+            if uploaded_file.name.lower().endswith(".zip"):
+
+                zip_data = BytesIO(uploaded_file.read())
+
+                with zipfile.ZipFile(zip_data) as z:
+
+                    for filename in z.namelist():
+
+                        if filename.endswith(
+                            (
+                                ".py",
+                                ".txt",
+                                ".md",
+                                ".json",
+                                ".html",
+                                ".css",
+                                ".js",
+                                ".jsx",
+                                ".tsx",
+                            )
+                        ):
+                            try:
+                                file_content = z.read(filename).decode("utf-8")
+
+                                all_files_content += f"""
+
+FILE: {filename}
+
+{file_content}
+
+============================================================
+
+"""
+
+                            except Exception:
+                                pass
+
+            else:
+
+                content = uploaded_file.read().decode("utf-8")
+
+                all_files_content += f"""
+
+FILE: {uploaded_file.name}
+
+{content}
+
+============================================================
+
+"""
+
+        except Exception:
+            pass
+
+    if not message and not all_files_content:
+        return Response({"reply": ("Please enter a message " "or upload files.")})
+
+    try:
+
+        MAX_CHARS = 50000
+
+        if len(all_files_content) > MAX_CHARS:
+            all_files_content = all_files_content[:MAX_CHARS]
+
+        prompt = f"""
+You are a senior Django architect and code reviewer.
+
+Responsibilities:
+
+- Review Django code
+- Find bugs
+- Suggest improvements
+- Recommend best practices
+- Improve database design
+- Improve API design
+- Find security issues
+- Suggest performance optimizations
+- Review project structure
+
+User Message:
+
+{message}
+
+Project Files:
+
+{all_files_content}
+
+Instructions:
+
+If multiple files are provided:
+
+1. Analyze project architecture
+2. Detect missing serializers
+3. Detect missing URLs
+4. Detect security issues
+5. Detect performance issues
+6. Suggest improvements
+7. Suggest folder structure
+8. Suggest production readiness improvements
+
+Return your analysis in exactly this format:
+
+# Project Scores
+
+Architecture: X/10
+Security: X/10
+Performance: X/10
+Production Readiness: X/10
+
+# Summary
+
+Write a summary.
+
+# Problems Found
+
+List all problems.
+
+# Improvements
+
+List all improvements.
+
+# Improved Code
+
+Provide code examples if relevant.
+"""
+
+        start_time = time.time()
+
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+        )
+
+        response_time = round(time.time() - start_time, 2)
+
+        reply = response.text
+
+        architecture = re.search(r"Architecture:\s*(\d+)/10", reply)
+
+        security = re.search(r"Security:\s*(\d+)/10", reply)
+
+        performance = re.search(r"Performance:\s*(\d+)/10", reply)
+
+        production = re.search(r"Production Readiness:\s*(\d+)/10", reply)
+
+        Analysis.objects.create(
+            user=request.user,
+            prompt=(message if message else "File analysis"),
+            response=reply,
+            architecture_score=(int(architecture.group(1)) if architecture else None),
+            security_score=(int(security.group(1)) if security else None),
+            performance_score=(int(performance.group(1)) if performance else None),
+            production_score=(int(production.group(1)) if production else None),
+            files_count=len(uploaded_files),
+            lines_of_code=len(all_files_content.splitlines()),
+            response_time=response_time,
+        )
+
+        return Response({"reply": reply})
+
+    except Exception as e:
+        return Response({"reply": (f"Gemini error: {str(e)}")})
