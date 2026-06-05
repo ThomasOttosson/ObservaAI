@@ -33,7 +33,7 @@ SECRET_KEY = os.getenv(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False") == "True"
 
-ALLOWED_HOSTS = ["django-ai-assistant-production.up.railway.app"]
+ALLOWED_HOSTS = ["web-production-392e59.up.railway.app"]
 
 
 # Application definition
