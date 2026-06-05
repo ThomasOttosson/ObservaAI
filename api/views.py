@@ -32,7 +32,12 @@ from reportlab.lib.styles import getSampleStyleSheet
 
 load_dotenv()
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+client = None
+
+if GEMINI_API_KEY:
+    client = genai.Client(api_key=GEMINI_API_KEY)
 
 
 @api_view(["GET"])
@@ -293,6 +298,12 @@ def delete_analysis(request, analysis_id):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def chat(request):
+
+    if client is None:
+        return Response({
+            "reply": "Gemini API key not configured."
+        })
+
     message = request.data.get(
         "message",
         "",
@@ -327,7 +338,9 @@ def chat(request):
                             )
                         ):
                             try:
-                                file_content = z.read(filename).decode("utf-8")
+                                file_content = z.read(
+                                    filename
+                                ).decode("utf-8")
 
                                 all_files_content += f"""
 
@@ -360,7 +373,9 @@ FILE: {uploaded_file.name}
             pass
 
     if not message and not all_files_content:
-        return Response({"reply": ("Please enter a message " "or upload files.")})
+        return Response({
+            "reply": "Please enter a message or upload files."
+        })
 
     try:
 
@@ -438,32 +453,73 @@ Provide code examples if relevant.
             contents=prompt,
         )
 
-        response_time = round(time.time() - start_time, 2)
+        response_time = round(
+            time.time() - start_time,
+            2,
+        )
 
         reply = response.text
 
-        architecture = re.search(r"Architecture:\s*(\d+)/10", reply)
+        architecture = re.search(
+            r"Architecture:\s*(\d+)/10",
+            reply,
+        )
 
-        security = re.search(r"Security:\s*(\d+)/10", reply)
+        security = re.search(
+            r"Security:\s*(\d+)/10",
+            reply,
+        )
 
-        performance = re.search(r"Performance:\s*(\d+)/10", reply)
+        performance = re.search(
+            r"Performance:\s*(\d+)/10",
+            reply,
+        )
 
-        production = re.search(r"Production Readiness:\s*(\d+)/10", reply)
+        production = re.search(
+            r"Production Readiness:\s*(\d+)/10",
+            reply,
+        )
 
         Analysis.objects.create(
             user=request.user,
-            prompt=(message if message else "File analysis"),
+            prompt=(
+                message
+                if message
+                else "File analysis"
+            ),
             response=reply,
-            architecture_score=(int(architecture.group(1)) if architecture else None),
-            security_score=(int(security.group(1)) if security else None),
-            performance_score=(int(performance.group(1)) if performance else None),
-            production_score=(int(production.group(1)) if production else None),
+            architecture_score=(
+                int(architecture.group(1))
+                if architecture
+                else None
+            ),
+            security_score=(
+                int(security.group(1))
+                if security
+                else None
+            ),
+            performance_score=(
+                int(performance.group(1))
+                if performance
+                else None
+            ),
+            production_score=(
+                int(production.group(1))
+                if production
+                else None
+            ),
             files_count=len(uploaded_files),
-            lines_of_code=len(all_files_content.splitlines()),
+            lines_of_code=len(
+                all_files_content.splitlines()
+            ),
             response_time=response_time,
         )
 
-        return Response({"reply": reply})
+        return Response({
+            "reply": reply
+        })
 
     except Exception as e:
-        return Response({"reply": (f"Gemini error: {str(e)}")})
+        return Response({
+            "reply": f"Gemini error: {str(e)}"
+        })
