@@ -1,5 +1,8 @@
 import "./App.css";
 import { useState, useEffect } from "react";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import {
@@ -56,11 +59,14 @@ function App() {
 
   const loadHistory = async () => {
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/history/", {
-        headers: {
-          Authorization: `Bearer ${token}`,
+      const response = await fetch(
+        `${API_URL}/api/history/`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         },
-      });
+      );
 
       const data = await response.json();
 
@@ -72,11 +78,14 @@ function App() {
 
   const loadStats = async () => {
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/stats/", {
-        headers: {
-          Authorization: `Bearer ${token}`,
+      const response = await fetch(
+        `${API_URL}/api/stats/`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         },
-      });
+      );
 
       const data = await response.json();
 
@@ -123,12 +132,15 @@ function App() {
 
   const deleteAnalysis = async (id) => {
     try {
-      await fetch(`http://127.0.0.1:8000/api/delete/${id}/`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
+      await fetch(
+        `${API_URL}/api/delete/${id}/`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         },
-      });
+      );
 
       loadHistory();
       loadStats();
@@ -139,12 +151,15 @@ function App() {
 
   const toggleFavorite = async (id) => {
     try {
-      await fetch(`http://127.0.0.1:8000/api/favorite/${id}/`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
+      await fetch(
+        `${API_URL}/api/favorite/${id}/`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         },
-      });
+      );
 
       loadHistory();
     } catch (error) {
@@ -154,16 +169,19 @@ function App() {
 
   const login = async () => {
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/token/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const response = await fetch(
+        `${API_URL}/api/token/`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            username,
+            password,
+          }),
         },
-        body: JSON.stringify({
-          username,
-          password,
-        }),
-      });
+      );
 
       const data = await response.json();
 
@@ -198,13 +216,16 @@ function App() {
         formData.append("files", file);
       });
 
-      const response = await fetch("http://127.0.0.1:8000/api/chat/", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
+      const response = await fetch(
+        `${API_URL}/api/chat/`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
         },
-        body: formData,
-      });
+      );
 
       const data = await response.json();
 
@@ -244,11 +265,14 @@ function App() {
   };
 
   const loadUser = async () => {
-    const response = await fetch("http://127.0.0.1:8000/api/me/", {
-      headers: {
-        Authorization: `Bearer ${token}`,
+    const response = await fetch(
+      `${API_URL}/api/me/`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       },
-    });
+    );
 
     const data = await response.json();
 
@@ -431,7 +455,7 @@ function App() {
               <button
                 onClick={() => {
                   window.open(
-                    `http://127.0.0.1:8000/api/export/${item.id}/`,
+                    `${API_URL}/api/export/${item.id}/`,
                     "_blank",
                   );
                 }}
