@@ -39,6 +39,12 @@ client = None
 if GEMINI_API_KEY:
     client = genai.Client(api_key=GEMINI_API_KEY)
 
+@api_view(["GET"])
+def api_root(request):
+    return Response({
+        "message": "API is running"
+    })
+
 
 @api_view(["GET"])
 def health(request):
