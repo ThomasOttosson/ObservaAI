@@ -1,5 +1,6 @@
 import "./App.css";
 import { useState, useEffect } from "react";
+import logo from "./assets/logo4.png";
 
 const API_URL =
   import.meta.env.VITE_API_URL ||
@@ -31,6 +32,8 @@ function App() {
   const [history, setHistory] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [token, setToken] = useState(localStorage.getItem("token") || "");
+
+  console.log("TOKEN:", token);
 
   const [stats, setStats] = useState({
     total_analyses: 0,
@@ -160,55 +163,38 @@ function App() {
   };
 
   const login = async () => {
-    try {
+try {
+console.log("USERNAME VALUE:", username);
+console.log("PASSWORD VALUE:", password);
 
-      console.log("USERNAME VALUE:", username);
-      console.log("PASSWORD VALUE:", password);
-      console.log("typeof username =", typeof username);
-      console.log("typeof password =", typeof password);
 
-      console.log("username =", username);
-      console.log("password =", password);
+const response = await fetch(`${API_URL}/api/token/`, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    username,
+    password,
+  }),
+});
 
-      console.log(
-        JSON.stringify({
-          username,
-          password,
-        }),
-      );
+console.log("STATUS:", response.status);
 
-      const response = await fetch(`${API_URL}/api/token/`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          username,
-          password,
-        }),
-      });
+const text = await response.text();
 
-      const data = await response.json();
+console.log("RAW RESPONSE:");
+console.log(text);
 
-      console.log("STATUS:", response.status);
-      console.log("DATA:", data);
+// Stoppa här tills vi vet exakt vad backend returnerar
+return;
 
-      if (data.access) {
-        localStorage.setItem("token", data.access);
-        setToken(data.access);
-        setLoggedIn(true);
 
-        setUsername("");
-        setPassword("");
-        setLoginError("");
-      } else {
-        setLoginError("Invalid username or password");
-      }
-    } catch (error) {
-      console.error(error);
-      setLoginError("Failed to connect to server");
-    }
-  };
+} catch (error) {
+console.error("LOGIN ERROR:", error);
+}
+};
+
 
   const sendMessage = async () => {
     if (!message.trim() && files.length === 0) return;
@@ -293,7 +279,10 @@ function App() {
 
   return (
     <div className="container">
-      <h1 className="title">Django AI Assistant</h1>
+      <div className="logo-container">
+        <img src={logo} alt="Django AI Assistant" className="logo" />
+        <p className="logo-subtitle">AI-powered Django code reviews</p>
+      </div>
 
       {username && <h3>Logged in as: {username}</h3>}
 
