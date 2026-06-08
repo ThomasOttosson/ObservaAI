@@ -1,7 +1,11 @@
 import "./App.css";
 import { useState, useEffect } from "react";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://web-production-392e59.up.railway.app";
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  "https://web-production-392e59.up.railway.app";
+
+console.log("API_URL =", API_URL);
 
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -59,14 +63,11 @@ function App() {
 
   const loadHistory = async () => {
     try {
-      const response = await fetch(
-        `${API_URL}/api/history/`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+      const response = await fetch(`${API_URL}/api/history/`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
-      );
+      });
 
       const data = await response.json();
 
@@ -78,14 +79,11 @@ function App() {
 
   const loadStats = async () => {
     try {
-      const response = await fetch(
-        `${API_URL}/api/stats/`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+      const response = await fetch(`${API_URL}/api/stats/`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
-      );
+      });
 
       const data = await response.json();
 
@@ -132,15 +130,12 @@ function App() {
 
   const deleteAnalysis = async (id) => {
     try {
-      await fetch(
-        `${API_URL}/api/delete/${id}/`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+      await fetch(`${API_URL}/api/delete/${id}/`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
-      );
+      });
 
       loadHistory();
       loadStats();
@@ -151,15 +146,12 @@ function App() {
 
   const toggleFavorite = async (id) => {
     try {
-      await fetch(
-        `${API_URL}/api/favorite/${id}/`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+      await fetch(`${API_URL}/api/favorite/${id}/`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
-      );
+      });
 
       loadHistory();
     } catch (error) {
@@ -169,21 +161,37 @@ function App() {
 
   const login = async () => {
     try {
-      const response = await fetch(
-        `${API_URL}/api/token/`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            username,
-            password,
-          }),
-        },
+
+      console.log("USERNAME VALUE:", username);
+      console.log("PASSWORD VALUE:", password);
+      console.log("typeof username =", typeof username);
+      console.log("typeof password =", typeof password);
+
+      console.log("username =", username);
+      console.log("password =", password);
+
+      console.log(
+        JSON.stringify({
+          username,
+          password,
+        }),
       );
 
+      const response = await fetch(`${API_URL}/api/token/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username,
+          password,
+        }),
+      });
+
       const data = await response.json();
+
+      console.log("STATUS:", response.status);
+      console.log("DATA:", data);
 
       if (data.access) {
         localStorage.setItem("token", data.access);
@@ -216,18 +224,18 @@ function App() {
         formData.append("files", file);
       });
 
-      const response = await fetch(
-        `${API_URL}/api/chat/`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          body: formData,
+      const response = await fetch(`${API_URL}/api/chat/`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
-      );
+        body: formData,
+      });
 
       const data = await response.json();
+
+      console.log("STATUS:", response.status);
+      console.log("DATA:", data);
 
       extractScores(data.reply || "");
 
@@ -265,14 +273,11 @@ function App() {
   };
 
   const loadUser = async () => {
-    const response = await fetch(
-      `${API_URL}/api/me/`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+    const response = await fetch(`${API_URL}/api/me/`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
       },
-    );
+    });
 
     const data = await response.json();
 
@@ -454,10 +459,7 @@ function App() {
 
               <button
                 onClick={() => {
-                  window.open(
-                    `${API_URL}/api/export/${item.id}/`,
-                    "_blank",
-                  );
+                  window.open(`${API_URL}/api/export/${item.id}/`, "_blank");
                 }}
               >
                 Export PDF
