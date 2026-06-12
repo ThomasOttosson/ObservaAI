@@ -306,11 +306,19 @@ def delete_analysis(request, analysis_id):
 def chat(request):
 
     if client is None:
-        return Response({"reply": "Gemini API key not configured."})
+        return Response(
+            {
+                "reply": "AI service is not configured yet. Please add GEMINI_API_KEY on the backend.",
+                "incident_data": None,
+            },
+            status=503,
+        )
 
     message = request.data.get(
         "message",
         "",
+        "analysis_mode",
+        "security",
     ).strip()
 
     uploaded_files = request.FILES.getlist("files")
@@ -386,7 +394,8 @@ FILE: {uploaded_file.name}
             all_files_content = all_files_content[:MAX_CHARS]
 
         is_log_analysis = (
-            any(file.name.lower().endswith(".log") for file in uploaded_files)
+            analysis_mode == "security"
+            or any(file.name.lower().endswith(".log") for file in uploaded_files)
             or "traceback" in all_files_content.lower()
             or "error" in all_files_content.lower()
             or "exception" in all_files_content.lower()
@@ -450,11 +459,11 @@ Return exactly this JSON structure:
 """
         else:
             prompt = f"""
-You are a senior Django architect and code reviewer.
+You are a senior software architect and code reviewer.
 
 Responsibilities:
 
-- Review Django code
+- Review code in any programming language
 - Find bugs
 - Suggest improvements
 - Recommend best practices

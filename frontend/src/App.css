@@ -491,6 +491,27 @@ body {
   word-break: break-word;
 }
 
+.splunk-query-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.open-splunk-btn {
+  border: none;
+  border-radius: 12px;
+  padding: 0 16px;
+  min-width: 80px;
+  background: #0ea5e9;
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.open-splunk-btn:hover {
+  background: #0284c7;
+}
+
 .copy-query-btn {
   border: none;
   border-radius: 12px;
@@ -710,6 +731,72 @@ body {
   color: white;
   font-weight: 700;
   cursor: pointer;
+}
+
+.mode-selector {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 20px auto;
+}
+
+.mode-selector button {
+  width: 240px;
+  height: 90px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  text-align: center;
+  line-height: 1.2;
+
+  padding: 0 20px;
+
+  border-radius: 999px;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+
+  background: rgba(34, 197, 94, 0.08);
+
+  color: #94a3b8;
+
+  font-size: 18px;
+  font-weight: 700;
+
+  cursor: pointer;
+
+  transition: all 0.2s ease;
+}
+
+.mode-selector button:hover {
+  border-color: rgba(34, 197, 94, 0.55);
+  transform: translateY(-2px);
+}
+
+.mode-selector button.active-mode {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+  border-color: rgba(34, 197, 94, 0.5);
+  box-shadow: 0 0 20px rgba(34, 197, 94, 0.15);
+}
+
+.ai-service-error {
+  background: rgba(249, 115, 22, 0.12);
+  border: 1px solid rgba(249, 115, 22, 0.35);
+  color: #fed7aa;
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.ai-service-error strong {
+  color: #fb923c;
+}
+
+.ai-service-error p {
+  margin-bottom: 0;
 }
 
 .title {
@@ -959,4 +1046,16 @@ input[type="file"] {
   button {
     width: 100%;
   }
+}
+
+.mode-selector button:hover {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.55);
+  color: #22c55e;
+  transform: translateY(-2px);
+}
+
+.mode-selector button.active-mode:hover {
+  background: rgba(34, 197, 94, 0.18);
+  color: #22c55e;
 }

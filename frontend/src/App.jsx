@@ -25,6 +25,7 @@ function App() {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [authMode, setAuthMode] = useState("login");
   const [registerError, setRegisterError] = useState("");
+  const [aiServiceError, setAiServiceError] = useState("");
   const [registerSuccess, setRegisterSuccess] = useState("");
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
@@ -41,6 +42,7 @@ function App() {
   const [incidentTimeline, setIncidentTimeline] = useState([]);
   const [rootCause, setRootCause] = useState(null);
   const [affectedServices, setAffectedServices] = useState([]);
+  const [analysisMode, setAnalysisMode] = useState("security");
   const [splunkQueries, setSplunkQueries] = useState([]);
   const [runbookSteps, setRunbookSteps] = useState([]);
   const [businessImpact, setBusinessImpact] = useState(null);
@@ -312,6 +314,7 @@ function App() {
       const formData = new FormData();
 
       formData.append("message", message);
+      formData.append("analysis_mode", analysisMode);
 
       files.forEach((file) => {
         formData.append("files", file);
@@ -329,11 +332,28 @@ function App() {
         localStorage.removeItem("token");
         setToken("");
         setShowLoginModal(true);
-        setLoading(false);
         return;
       }
 
       const data = await response.json();
+
+      if (response.status === 503) {
+        setAiServiceError(
+          data.reply ||
+            "AI service is not configured yet. Please add GEMINI_API_KEY on the backend.",
+        );
+        setMessages((prev) => [
+          ...prev,
+          {
+            user: message || `Uploaded ${files.length} file(s)`,
+            assistant:
+              data.reply ||
+              "AI service is not configured yet. Please add GEMINI_API_KEY on the backend.",
+          },
+        ]);
+
+        return;
+      }
 
       extractScores(data.reply || "");
 
@@ -459,7 +479,7 @@ function App() {
     setFiles((prev) => [...prev, ...allowedFiles]);
   };
 
-  const tryDemoIncident = () => {
+  const tryDemoIncident = async () => {
     if (showDemoIncident) {
       setShowDemoIncident(false);
       setIncidentTimeline([]);
@@ -469,70 +489,150 @@ function App() {
       setRunbookSteps([]);
       setBusinessImpact(null);
       setMttrEstimate(null);
+      setExecutiveSummary("");
+      setIncidentHealthScore(null);
       setMessage("");
       return;
     }
 
-    setShowDemoIncident(true);
+    if (!token) {
+      alert("Please login first");
+      setShowLoginModal(true);
+      return;
+    }
 
-    setMessage(`Analyze this production incident:
+    const demoLogs = `Analyze this production incident:
 
 2026-06-09 12:00:01 ERROR Database connection timeout on /api/token/
 2026-06-09 12:00:03 ERROR Login failed for multiple users
 2026-06-09 12:00:05 CRITICAL Authentication service unavailable
 2026-06-09 12:00:08 WARNING Response time increased to 8.4s
 2026-06-09 12:00:12 ERROR Gunicorn worker timeout
-`);
+`;
 
-    setIncidentTimeline([
-      { time: "12:00:01", event: "Database timeout detected" },
-      { time: "12:00:03", event: "User login failures started" },
-      { time: "12:00:05", event: "Authentication outage" },
-      { time: "12:00:08", event: "Response latency spike" },
-      { time: "12:00:12", event: "Gunicorn worker timeout" },
-    ]);
+    setShowDemoIncident(true);
+    setMessage(demoLogs);
+    setLoading(true);
 
-    setRootCause({
-      cause: "Database connection timeout on the authentication endpoint.",
-      impact: "Users could not log in and API response times increased.",
-      severity: "Critical",
-      fix: "Check database availability, restart affected workers, and review connection pool limits.",
-    });
+    try {
+      const formData = new FormData();
 
-    setAffectedServices([
-      { name: "Authentication API", status: "down" },
-      { name: "Database", status: "degraded" },
-      { name: "Gunicorn Workers", status: "degraded" },
-      { name: "Frontend", status: "healthy" },
-    ]);
+      formData.append("message", demoLogs);
+      formData.append("analysis_mode", "security");
 
-    setSplunkQueries([
-      'index=main "/api/token/" ERROR',
-      'index=main "Database connection timeout"',
-      'index=main sourcetype=gunicorn "worker timeout"',
-      'index=main ("CRITICAL" OR "ERROR") | stats count by source',
-    ]);
+      const response = await fetch(`${API_URL}/api/chat/`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
 
-    setRunbookSteps([
-      "Check database availability and connection limits.",
-      "Restart unhealthy Gunicorn workers.",
-      "Review authentication endpoint error rate.",
-      "Increase database connection pool if needed.",
-      "Create an alert for repeated /api/token/ failures.",
-    ]);
+      if (response.status === 401) {
+        localStorage.removeItem("token");
+        setToken("");
+        setShowLoginModal(true);
+        return;
+      }
 
-    setBusinessImpact({
-      affectedUsers: "Multiple users unable to log in",
-      affectedEndpoint: "/api/token/",
-      estimatedDowntime: "12 minutes",
-      risk: "Authentication outage could block all user access",
-    });
+      const data = await response.json();
 
-    setMttrEstimate({
-      current: "12 min",
-      target: "5 min",
-      improvement: "58% faster recovery",
-    });
+      if (response.status === 503) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            user: "Try Demo Incident",
+            assistant:
+              data.reply ||
+              "AI service is not configured yet. Please add GEMINI_API_KEY on the backend.",
+          },
+        ]);
+
+        return;
+      }
+
+      if (data?.incident_data) {
+        const incident = data.incident_data;
+
+        setExecutiveSummary(incident?.summary || "");
+
+        setRootCause(incident?.root_cause || null);
+
+        setIncidentTimeline(
+          Array.isArray(incident?.timeline) ? incident.timeline : [],
+        );
+
+        setAffectedServices(
+          Array.isArray(incident?.affected_services)
+            ? incident.affected_services
+            : [],
+        );
+
+        setSplunkQueries(
+          Array.isArray(incident?.splunk_queries)
+            ? incident.splunk_queries
+            : [],
+        );
+
+        setRunbookSteps(
+          Array.isArray(incident?.runbook_steps) ? incident.runbook_steps : [],
+        );
+
+        setBusinessImpact(incident?.business_impact || null);
+
+        setMttrEstimate(incident?.mttr_estimate || null);
+
+        const observability = incident?.incident_scores?.observability ?? 0;
+        const reliability = incident?.incident_scores?.reliability ?? 0;
+        const security = incident?.incident_scores?.security ?? 0;
+
+        const healthScore = Math.round(
+          ((observability + reliability + security) / 30) * 100,
+        );
+
+        setIncidentHealthScore(healthScore);
+
+        setScores((prev) => ({
+          ...prev,
+          observability,
+          security,
+          reliability,
+          severity: incident?.incident_scores?.severity || "-",
+        }));
+
+        setIncidentHistory((prev) => [
+          {
+            date: new Date().toLocaleString(),
+            severity: incident?.incident_scores?.severity || "Unknown",
+            summary: incident?.summary || "Demo incident analyzed",
+          },
+          ...prev,
+        ]);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          {
+            user: "Try Demo Incident",
+            assistant: data.reply || "No structured incident data received.",
+          },
+        ]);
+      }
+
+      await loadHistory();
+      await loadStats();
+    } catch (error) {
+      console.error(error);
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          user: "Try Demo Incident",
+          assistant: "Failed to analyze demo incident.",
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getHealthScoreClass = () => {
@@ -817,7 +917,24 @@ function App() {
         </div>
       )}
 
-      <div className="mode-badge">Security & Observability Mode</div>
+      <div className="mode-selector">
+        <button
+          className={analysisMode === "security" ? "active-mode" : ""}
+          onClick={() => setAnalysisMode("security")}
+        >
+          Security &<br />
+          Observability Mode
+        </button>
+
+        <button
+          className={analysisMode === "code" ? "active-mode" : ""}
+          onClick={() => setAnalysisMode("code")}
+        >
+          Code Review
+          <br />
+          Mode
+        </button>
+      </div>
       {incidentTimeline.length > 0 && (
         <div className="timeline-card">
           <h3>Incident Timeline</h3>
@@ -923,12 +1040,32 @@ function App() {
               <div key={index} className="splunk-query-row">
                 <pre className="splunk-query">{query}</pre>
 
-                <button
-                  className="copy-query-btn"
-                  onClick={() => copyToClipboard(query)}
-                >
-                  Copy
-                </button>
+                <div className="splunk-query-actions">
+                  <button
+                    className="copy-query-btn"
+                    onClick={() => copyToClipboard(query)}
+                  >
+                    Copy
+                  </button>
+
+                  <button
+                    className="open-splunk-btn"
+                    onClick={() => {
+                      if (!splunkBaseUrl) {
+                        alert("Please enter your Splunk instance URL first");
+                        return;
+                      }
+
+                      const url =
+                        `${splunkBaseUrl}/en-US/app/search/search?q=` +
+                        encodeURIComponent(`search ${query}`);
+
+                      window.open(url, "_blank");
+                    }}
+                  >
+                    Open
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -1013,6 +1150,13 @@ function App() {
       <button className="demo-incident-btn" onClick={tryDemoIncident}>
         {showDemoIncident ? "Hide Demo Incident" : "Try Demo Incident"}
       </button>
+
+      {aiServiceError && (
+        <div className="ai-service-error">
+          <strong>AI Service Not Configured</strong>
+          <p>{aiServiceError}</p>
+        </div>
+      )}
       <div className="chat-window">
         {messages.map((msg, index) => (
           <div key={index} className="message">
@@ -1082,18 +1226,6 @@ function App() {
 
         {files.length > 0 && (
           <div className="selected-files">
-            <p>Selected files:</p>
-
-            {files.map((file, index) => (
-              <p key={index}>
-                <strong>{file.name}</strong>
-              </p>
-            ))}
-          </div>
-        )}
-
-        {files.length > 0 && (
-          <div>
             <p>Selected files:</p>
 
             {files.map((file, index) => (
