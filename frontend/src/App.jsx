@@ -1,6 +1,6 @@
 import "./App.css";
 import { useState, useEffect } from "react";
-import logo from "./assets/logo4.png";
+import logo from "./assets/logo14.png";
 
 const API_URL =
   import.meta.env.VITE_API_URL ||
@@ -22,6 +22,10 @@ import {
 function App() {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [authMode, setAuthMode] = useState("login");
+  const [registerError, setRegisterError] = useState("");
+  const [registerSuccess, setRegisterSuccess] = useState("");
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
   const [username, setUsername] = useState("");
@@ -32,6 +36,42 @@ function App() {
   const [history, setHistory] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [token, setToken] = useState(localStorage.getItem("token") || "");
+  const [dragActive, setDragActive] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [incidentTimeline, setIncidentTimeline] = useState([]);
+  const [rootCause, setRootCause] = useState(null);
+  const [affectedServices, setAffectedServices] = useState([]);
+  const [splunkQueries, setSplunkQueries] = useState([]);
+  const [runbookSteps, setRunbookSteps] = useState([]);
+  const [businessImpact, setBusinessImpact] = useState(null);
+  const [mttrEstimate, setMttrEstimate] = useState(null);
+  const [showDemoIncident, setShowDemoIncident] = useState(false);
+  const [executiveSummary, setExecutiveSummary] = useState("");
+  const [incidentHealthScore, setIncidentHealthScore] = useState(null);
+  const [splunkBaseUrl, setSplunkBaseUrl] = useState(
+    localStorage.getItem("splunkBaseUrl") || "",
+  );
+  const [incidentHistory, setIncidentHistory] = useState(() => {
+    const saved = localStorage.getItem("incidentHistory");
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  useEffect(() => {
+    console.log("TOKEN CHANGED:", token);
+  }, [token]);
+
+  useEffect(() => {
+    localStorage.setItem("incidentHistory", JSON.stringify(incidentHistory));
+  }, [incidentHistory]);
+
+  useEffect(() => {
+    setScores((prev) => ({
+      ...prev,
+      observability: "N/A",
+      reliability: "N/A",
+      severity: "N/A",
+    }));
+  }, []);
 
   console.log("TOKEN:", token);
 
@@ -46,6 +86,9 @@ function App() {
       security: 0,
       performance: 0,
       production: 0,
+      observability: "-",
+      reliability: "-",
+      severity: "-",
     },
   });
 
@@ -65,6 +108,11 @@ function App() {
   }, [token]);
 
   const loadHistory = async () => {
+    if (!token) {
+      setHistory([]);
+      return;
+    }
+
     try {
       const response = await fetch(`${API_URL}/api/history/`, {
         headers: {
@@ -72,11 +120,21 @@ function App() {
         },
       });
 
+      if (response.status === 401) {
+        setHistory([]);
+        return;
+      }
+
       const data = await response.json();
 
-      setHistory(data);
+      if (Array.isArray(data)) {
+        setHistory(data);
+      } else {
+        setHistory([]);
+      }
     } catch (error) {
       console.error(error);
+      setHistory([]);
     }
   };
 
@@ -162,41 +220,90 @@ function App() {
     }
   };
 
+  const register = async () => {
+    try {
+      setRegisterError("");
+      setRegisterSuccess("");
+
+      const response = await fetch(`${API_URL}/api/register/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username,
+          password,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setRegisterSuccess("Account created. You can now login.");
+        setAuthMode("login");
+        setPassword("");
+      } else {
+        setRegisterError(data.error || "Could not create account.");
+      }
+    } catch (error) {
+      console.error(error);
+      setRegisterError("Failed to connect to server.");
+    }
+  };
+
   const login = async () => {
-try {
-console.log("USERNAME VALUE:", username);
-console.log("PASSWORD VALUE:", password);
+    try {
+      console.log("USERNAME VALUE:", username);
+      console.log("PASSWORD VALUE:", password);
 
+      const response = await fetch(`${API_URL}/api/token/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username,
+          password,
+        }),
+      });
 
-const response = await fetch(`${API_URL}/api/token/`, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    username,
-    password,
-  }),
-});
+      console.log("STATUS:", response.status);
 
-console.log("STATUS:", response.status);
+      const data = await response.json();
 
-const text = await response.text();
+      console.log("DATA:", data);
 
-console.log("RAW RESPONSE:");
-console.log(text);
+      if (data.access) {
+        console.log("ACCESS TOKEN RECEIVED");
 
-// Stoppa här tills vi vet exakt vad backend returnerar
-return;
+        localStorage.setItem("token", data.access);
 
+        console.log("LOCALSTORAGE TOKEN:", localStorage.getItem("token"));
 
-} catch (error) {
-console.error("LOGIN ERROR:", error);
-}
-};
+        setToken(data.access);
 
+        setLoggedIn(true);
+
+        setUsername("");
+        setPassword("");
+        setLoginError("");
+        setShowLoginModal(false);
+      } else {
+        setLoginError("Invalid username or password");
+      }
+    } catch (error) {
+      console.error("LOGIN ERROR:", error);
+      setLoginError("Failed to connect to server");
+    }
+  };
 
   const sendMessage = async () => {
+    if (!token) {
+      alert("Please login first");
+      setShowLoginModal(true);
+      return;
+    }
+
     if (!message.trim() && files.length === 0) return;
 
     setLoading(true);
@@ -218,12 +325,76 @@ console.error("LOGIN ERROR:", error);
         body: formData,
       });
 
+      if (response.status === 401) {
+        localStorage.removeItem("token");
+        setToken("");
+        setShowLoginModal(true);
+        setLoading(false);
+        return;
+      }
+
       const data = await response.json();
 
-      console.log("STATUS:", response.status);
-      console.log("DATA:", data);
-
       extractScores(data.reply || "");
+
+      if (data?.incident_data) {
+        const incident = data.incident_data;
+
+        const observability = incident?.incident_scores?.observability ?? 0;
+        const reliability = incident?.incident_scores?.reliability ?? 0;
+        const security = incident?.incident_scores?.security ?? 0;
+
+        const healthScore = Math.round(
+          ((observability + reliability + security) / 30) * 100,
+        );
+
+        setIncidentHealthScore(healthScore);
+
+        setExecutiveSummary(incident?.summary || "");
+
+        setScores((prev) => ({
+          ...prev,
+          observability: incident?.incident_scores?.observability ?? "-",
+          security: incident?.incident_scores?.security ?? prev.security,
+          reliability: incident?.incident_scores?.reliability ?? "-",
+          severity: incident?.incident_scores?.severity ?? "-",
+        }));
+
+        setRootCause(incident?.root_cause || null);
+
+        setIncidentTimeline(
+          Array.isArray(incident?.timeline) ? incident.timeline : [],
+        );
+
+        setAffectedServices(
+          Array.isArray(incident?.affected_services)
+            ? incident.affected_services
+            : [],
+        );
+
+        setSplunkQueries(
+          Array.isArray(incident?.splunk_queries)
+            ? incident.splunk_queries
+            : [],
+        );
+
+        setRunbookSteps(
+          Array.isArray(incident?.runbook_steps) ? incident.runbook_steps : [],
+        );
+
+        setBusinessImpact(incident?.business_impact || null);
+
+        setMttrEstimate(incident?.mttr_estimate || null);
+
+        setIncidentHistory((prev) => [
+          {
+            date: new Date().toLocaleString(),
+            severity: incident?.incident_scores?.severity || "Unknown",
+            summary: incident?.summary || "No summary available",
+          },
+          ...prev,
+        ]);
+      }
 
       setMessages((prev) => [
         ...prev,
@@ -244,7 +415,7 @@ console.error("LOGIN ERROR:", error);
       setMessages((prev) => [
         ...prev,
         {
-          user: message,
+          user: message || "File upload",
           assistant: "Failed to connect to backend.",
         },
       ]);
@@ -256,6 +427,124 @@ console.error("LOGIN ERROR:", error);
   const logout = () => {
     localStorage.removeItem("token");
     setToken("");
+    setUsername("");
+    setPassword("");
+    setMessages([]);
+    setHistory([]);
+    setLoggedIn(false);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setDragActive(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setDragActive(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragActive(false);
+
+    const droppedFiles = Array.from(e.dataTransfer.files);
+
+    const allowedFiles = droppedFiles.filter((file) =>
+      [".py", ".txt", ".zip", ".log"].some((ext) =>
+        file.name.toLowerCase().endsWith(ext),
+      ),
+    );
+
+    setFiles((prev) => [...prev, ...allowedFiles]);
+  };
+
+  const tryDemoIncident = () => {
+    if (showDemoIncident) {
+      setShowDemoIncident(false);
+      setIncidentTimeline([]);
+      setRootCause(null);
+      setAffectedServices([]);
+      setSplunkQueries([]);
+      setRunbookSteps([]);
+      setBusinessImpact(null);
+      setMttrEstimate(null);
+      setMessage("");
+      return;
+    }
+
+    setShowDemoIncident(true);
+
+    setMessage(`Analyze this production incident:
+
+2026-06-09 12:00:01 ERROR Database connection timeout on /api/token/
+2026-06-09 12:00:03 ERROR Login failed for multiple users
+2026-06-09 12:00:05 CRITICAL Authentication service unavailable
+2026-06-09 12:00:08 WARNING Response time increased to 8.4s
+2026-06-09 12:00:12 ERROR Gunicorn worker timeout
+`);
+
+    setIncidentTimeline([
+      { time: "12:00:01", event: "Database timeout detected" },
+      { time: "12:00:03", event: "User login failures started" },
+      { time: "12:00:05", event: "Authentication outage" },
+      { time: "12:00:08", event: "Response latency spike" },
+      { time: "12:00:12", event: "Gunicorn worker timeout" },
+    ]);
+
+    setRootCause({
+      cause: "Database connection timeout on the authentication endpoint.",
+      impact: "Users could not log in and API response times increased.",
+      severity: "Critical",
+      fix: "Check database availability, restart affected workers, and review connection pool limits.",
+    });
+
+    setAffectedServices([
+      { name: "Authentication API", status: "down" },
+      { name: "Database", status: "degraded" },
+      { name: "Gunicorn Workers", status: "degraded" },
+      { name: "Frontend", status: "healthy" },
+    ]);
+
+    setSplunkQueries([
+      'index=main "/api/token/" ERROR',
+      'index=main "Database connection timeout"',
+      'index=main sourcetype=gunicorn "worker timeout"',
+      'index=main ("CRITICAL" OR "ERROR") | stats count by source',
+    ]);
+
+    setRunbookSteps([
+      "Check database availability and connection limits.",
+      "Restart unhealthy Gunicorn workers.",
+      "Review authentication endpoint error rate.",
+      "Increase database connection pool if needed.",
+      "Create an alert for repeated /api/token/ failures.",
+    ]);
+
+    setBusinessImpact({
+      affectedUsers: "Multiple users unable to log in",
+      affectedEndpoint: "/api/token/",
+      estimatedDowntime: "12 minutes",
+      risk: "Authentication outage could block all user access",
+    });
+
+    setMttrEstimate({
+      current: "12 min",
+      target: "5 min",
+      improvement: "58% faster recovery",
+    });
+  };
+
+  const getHealthScoreClass = () => {
+    if (incidentHealthScore < 40) {
+      return "health-critical";
+    }
+
+    if (incidentHealthScore < 70) {
+      return "health-warning";
+    }
+
+    return "health-good";
   };
 
   const loadUser = async () => {
@@ -277,11 +566,25 @@ console.error("LOGIN ERROR:", error);
     }
   };
 
+  const copyToClipboard = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+
+      alert("Query copied to clipboard");
+    } catch (error) {
+      console.error(error);
+
+      alert("Could not copy query");
+    }
+  };
+
   return (
     <div className="container">
       <div className="logo-container">
-        <img src={logo} alt="Django AI Assistant" className="logo" />
-        <p className="logo-subtitle">AI-powered Django code reviews</p>
+        <img src={logo} alt="ObservaAI" className="logo" />
+        <p className="logo-subtitle">
+          AI-powered security and observability analysis
+        </p>
       </div>
 
       {username && <h3>Logged in as: {username}</h3>}
@@ -496,9 +799,220 @@ console.error("LOGIN ERROR:", error);
             <h3>Production</h3>
             <h2>{scores.production}/10</h2>
           </div>
+
+          <div className="score-card">
+            <h3>Observability</h3>
+            <h2>{scores.observability}</h2>
+          </div>
+
+          <div className="score-card">
+            <h3>Reliability</h3>
+            <h2>{scores.reliability}</h2>
+          </div>
+
+          <div className="score-card">
+            <h3>Severity</h3>
+            <h2>{scores.severity}</h2>
+          </div>
         </div>
       )}
 
+      <div className="mode-badge">Security & Observability Mode</div>
+      {incidentTimeline.length > 0 && (
+        <div className="timeline-card">
+          <h3>Incident Timeline</h3>
+
+          {incidentTimeline.map((item, index) => (
+            <div key={index} className="timeline-item">
+              <strong>{item.time}</strong>
+
+              <span>{item.event}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {incidentHealthScore !== null && (
+        <div className="health-score-card">
+          <h3>Incident Health Score</h3>
+          <div className={`health-score-number ${getHealthScoreClass()}`}>
+            {incidentHealthScore}/100
+          </div>
+        </div>
+      )}
+
+      {executiveSummary && (
+        <div className="executive-summary-card">
+          <h3>Executive Summary</h3>
+
+          <p>{executiveSummary}</p>
+        </div>
+      )}
+
+      {rootCause && (
+        <div className="root-cause-card">
+          <h3>Root Cause Analysis</h3>
+
+          <div>
+            <strong>Cause</strong>
+            <p>{rootCause.cause}</p>
+          </div>
+
+          <div>
+            <strong>Impact</strong>
+            <p>{rootCause.impact}</p>
+          </div>
+
+          <div>
+            <strong>Severity</strong>
+
+            <span
+              className={`severity-badge severity-${rootCause.severity.toLowerCase()}`}
+            >
+              {rootCause.severity}
+            </span>
+          </div>
+
+          <div>
+            <button
+              className="export-incident-btn"
+              onClick={() => window.print()}
+            >
+              Export Incident Report
+            </button>
+            <strong>Recommended Fix</strong>
+            <p>{rootCause.fix}</p>
+          </div>
+        </div>
+      )}
+      {affectedServices.length > 0 && (
+        <div className="services-card">
+          <h3>Affected Services</h3>
+
+          {affectedServices.map((service, index) => (
+            <div key={index} className="service-row">
+              <span>{service.name}</span>
+
+              <span className={`service-status status-${service.status}`}>
+                {service.status}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {splunkQueries.length > 0 && (
+        <>
+          <div className="splunk-url-card">
+            <h3>Splunk Instance</h3>
+
+            <input
+              type="text"
+              placeholder="https://your-splunk-instance.com"
+              value={splunkBaseUrl}
+              onChange={(e) => {
+                setSplunkBaseUrl(e.target.value);
+                localStorage.setItem("splunkBaseUrl", e.target.value);
+              }}
+            />
+          </div>
+
+          <div className="splunk-query-card">
+            <h3>Suggested Splunk Queries</h3>
+
+            {splunkQueries.map((query, index) => (
+              <div key={index} className="splunk-query-row">
+                <pre className="splunk-query">{query}</pre>
+
+                <button
+                  className="copy-query-btn"
+                  onClick={() => copyToClipboard(query)}
+                >
+                  Copy
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {runbookSteps.length > 0 && (
+        <div className="runbook-card">
+          <h3>Recommended Runbook</h3>
+
+          <ol>
+            {runbookSteps.map((step, index) => (
+              <li key={index}>{step}</li>
+            ))}
+          </ol>
+        </div>
+      )}
+
+      {businessImpact && (
+        <div className="business-impact-card">
+          <h3>Business Impact</h3>
+
+          <p>
+            <strong>Affected Users:</strong> {businessImpact.affectedUsers}
+          </p>
+          <p>
+            <strong>Affected Endpoint:</strong>{" "}
+            {businessImpact.affectedEndpoint}
+          </p>
+          <p>
+            <strong>Estimated Downtime:</strong>{" "}
+            {businessImpact.estimatedDowntime}
+          </p>
+          <p>
+            <strong>Risk:</strong> {businessImpact.risk}
+          </p>
+        </div>
+      )}
+      {mttrEstimate && (
+        <div className="mttr-card">
+          <h3>MTTR Estimate</h3>
+
+          <div className="mttr-grid">
+            <div>
+              <strong>Current</strong>
+              <p>{mttrEstimate.current}</p>
+            </div>
+
+            <div>
+              <strong>Target</strong>
+              <p>{mttrEstimate.target}</p>
+            </div>
+
+            <div>
+              <strong>Improvement</strong>
+              <p>{mttrEstimate.improvement}</p>
+            </div>
+          </div>
+        </div>
+      )}
+      {incidentHistory.length > 0 && (
+        <div className="incident-history-card">
+          <h3>Incident History</h3>
+          <button
+            className="clear-history-btn"
+            onClick={() => setIncidentHistory([])}
+          >
+            Clear History
+          </button>
+
+          {incidentHistory.map((item, index) => (
+            <div key={index} className="incident-history-item">
+              <strong>{item.severity}</strong>
+
+              <p>{item.summary}</p>
+
+              <small>{item.date}</small>
+            </div>
+          ))}
+        </div>
+      )}
+      <button className="demo-incident-btn" onClick={tryDemoIncident}>
+        {showDemoIncident ? "Hide Demo Incident" : "Try Demo Incident"}
+      </button>
       <div className="chat-window">
         {messages.map((msg, index) => (
           <div key={index} className="message">
@@ -538,7 +1052,7 @@ console.error("LOGIN ERROR:", error);
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Paste Django code or ask a question..."
+          placeholder="Upload code, logs, or ask a question..."
           rows={10}
         />
       </div>
@@ -549,12 +1063,34 @@ console.error("LOGIN ERROR:", error);
           marginBottom: "10px",
         }}
       >
-        <input
-          type="file"
-          multiple
-          accept=".py,.txt,.zip"
-          onChange={(e) => setFiles([...e.target.files])}
-        />
+        <div
+          className={`drop-zone ${dragActive ? "drop-zone-active" : ""}`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          <p>Drag and drop files here</p>
+          <span>Accepted: .py, .txt, .zip</span>
+
+          <input
+            type="file"
+            multiple
+            accept=".py,.txt,.zip,.log"
+            onChange={(e) => setFiles([...e.target.files])}
+          />
+        </div>
+
+        {files.length > 0 && (
+          <div className="selected-files">
+            <p>Selected files:</p>
+
+            {files.map((file, index) => (
+              <p key={index}>
+                <strong>{file.name}</strong>
+              </p>
+            ))}
+          </div>
+        )}
 
         {files.length > 0 && (
           <div>
@@ -569,38 +1105,139 @@ console.error("LOGIN ERROR:", error);
         )}
       </div>
 
-      {!token && (
-        <div
-          style={{
-            marginBottom: "20px",
-            display: "flex",
-            gap: "10px",
-            flexWrap: "wrap",
-          }}
-        >
-          <input
-            type="text"
-            placeholder="Username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-          />
+      <button className="send-btn" onClick={sendMessage} disabled={loading}>
+        {loading ? "Thinking..." : "Send"}
+      </button>
 
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+      <div className="auth-actions">
+        {!token ? (
+          <>
+            <button
+              className="login-open-btn"
+              onClick={() => {
+                setAuthMode("login");
+                setShowLoginModal(true);
+              }}
+            >
+              Login
+            </button>
 
-          <button onClick={login}>Login</button>
+            <button
+              className="register-open-btn"
+              onClick={() => {
+                setAuthMode("register");
+                setShowLoginModal(true);
+              }}
+            >
+              Register
+            </button>
+          </>
+        ) : (
+          <button
+            className="logout-btn"
+            onClick={() => setShowLogoutModal(true)}
+          >
+            Logout
+          </button>
+        )}
+      </div>
+
+      {showLoginModal && !token && (
+        <div className="modal-overlay">
+          <div className="login-modal">
+            <button
+              className="modal-close"
+              onClick={() => setShowLoginModal(false)}
+            >
+              ×
+            </button>
+
+            <h2>{authMode === "login" ? "Welcome back" : "Create account"}</h2>
+
+            <p>
+              {authMode === "login"
+                ? "Login to access your Django AI dashboard."
+                : "Create an account to start saving your analyses."}
+            </p>
+
+            <input
+              type="text"
+              placeholder="Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
+
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+
+            {loginError && authMode === "login" && (
+              <p className="login-error">{loginError}</p>
+            )}
+
+            {registerError && authMode === "register" && (
+              <p className="login-error">{registerError}</p>
+            )}
+
+            {registerSuccess && (
+              <p className="register-success">{registerSuccess}</p>
+            )}
+
+            <button
+              className="login-submit-btn"
+              onClick={authMode === "login" ? login : register}
+            >
+              {authMode === "login" ? "Login" : "Create account"}
+            </button>
+
+            <button
+              className="auth-switch-btn"
+              onClick={() => {
+                setAuthMode(authMode === "login" ? "register" : "login");
+                setLoginError("");
+                setRegisterError("");
+                setRegisterSuccess("");
+              }}
+            >
+              {authMode === "login"
+                ? "No account? Create one"
+                : "Already have an account? Login"}
+            </button>
+          </div>
         </div>
       )}
 
-      {token && <button onClick={logout}>Logout</button>}
+      {showLogoutModal && (
+        <div className="modal-overlay">
+          <div className="logout-modal">
+            <h2>Log out?</h2>
 
-      <button onClick={sendMessage} disabled={loading}>
-        {loading ? "Thinking..." : "Send"}
-      </button>
+            <p>Are you sure you want to log out of your account?</p>
+
+            <div className="logout-actions">
+              <button
+                className="cancel-btn"
+                onClick={() => setShowLogoutModal(false)}
+              >
+                Cancel
+              </button>
+
+              <button
+                className="confirm-logout-btn"
+                onClick={() => {
+                  logout();
+                  setShowLogoutModal(false);
+                }}
+              >
+                Log out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

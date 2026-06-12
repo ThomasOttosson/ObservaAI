@@ -2,6 +2,7 @@ import os
 import re
 import zipfile
 import time
+import json
 from io import BytesIO
 
 from dotenv import load_dotenv
@@ -39,11 +40,10 @@ client = None
 if GEMINI_API_KEY:
     client = genai.Client(api_key=GEMINI_API_KEY)
 
+
 @api_view(["GET"])
 def api_root(request):
-    return Response({
-        "message": "API is running"
-    })
+    return Response({"message": "API is running"})
 
 
 @api_view(["GET"])
@@ -306,9 +306,7 @@ def delete_analysis(request, analysis_id):
 def chat(request):
 
     if client is None:
-        return Response({
-            "reply": "Gemini API key not configured."
-        })
+        return Response({"reply": "Gemini API key not configured."})
 
     message = request.data.get(
         "message",
@@ -341,12 +339,11 @@ def chat(request):
                                 ".js",
                                 ".jsx",
                                 ".tsx",
+                                ".log",
                             )
                         ):
                             try:
-                                file_content = z.read(
-                                    filename
-                                ).decode("utf-8")
+                                file_content = z.read(filename).decode("utf-8")
 
                                 all_files_content += f"""
 
@@ -379,9 +376,7 @@ FILE: {uploaded_file.name}
             pass
 
     if not message and not all_files_content:
-        return Response({
-            "reply": "Please enter a message or upload files."
-        })
+        return Response({"reply": "Please enter a message or upload files."})
 
     try:
 
@@ -390,7 +385,71 @@ FILE: {uploaded_file.name}
         if len(all_files_content) > MAX_CHARS:
             all_files_content = all_files_content[:MAX_CHARS]
 
-        prompt = f"""
+        is_log_analysis = (
+            any(file.name.lower().endswith(".log") for file in uploaded_files)
+            or "traceback" in all_files_content.lower()
+            or "error" in all_files_content.lower()
+            or "exception" in all_files_content.lower()
+            or "critical" in all_files_content.lower()
+        )
+
+        if is_log_analysis:
+            prompt = f"""
+You are a senior Site Reliability Engineer and Splunk Incident Analyst.
+
+Analyze the following logs and return ONLY valid JSON.
+
+User Message:
+{message}
+
+Logs and Files:
+{all_files_content}
+
+Return exactly this JSON structure:
+
+{{
+  "incident_scores": {{
+    "observability": 0,
+    "security": 0,
+    "reliability": 0,
+    "severity": "Low/Medium/High/Critical"
+  }},
+  "summary": "",
+  "root_cause": {{
+    "cause": "",
+    "impact": "",
+    "severity": "",
+    "fix": ""
+  }},
+  "timeline": [
+    {{
+      "time": "",
+      "event": ""
+    }}
+  ],
+  "affected_services": [
+    {{
+      "name": "",
+      "status": "healthy/degraded/down"
+    }}
+  ],
+  "splunk_queries": [],
+  "runbook_steps": [],
+  "business_impact": {{
+    "affectedUsers": "",
+    "affectedEndpoint": "",
+    "estimatedDowntime": "",
+    "risk": ""
+  }},
+  "mttr_estimate": {{
+    "current": "",
+    "target": "",
+    "improvement": ""
+  }}
+}}
+"""
+        else:
+            prompt = f"""
 You are a senior Django architect and code reviewer.
 
 Responsibilities:
@@ -466,6 +525,14 @@ Provide code examples if relevant.
 
         reply = response.text
 
+        incident_data = None
+
+        if is_log_analysis:
+            try:
+                incident_data = json.loads(reply)
+            except Exception as e:
+                print("JSON ERROR:", e)
+
         architecture = re.search(
             r"Architecture:\s*(\d+)/10",
             reply,
@@ -488,44 +555,23 @@ Provide code examples if relevant.
 
         Analysis.objects.create(
             user=request.user,
-            prompt=(
-                message
-                if message
-                else "File analysis"
-            ),
+            prompt=(message if message else "File analysis"),
             response=reply,
-            architecture_score=(
-                int(architecture.group(1))
-                if architecture
-                else None
-            ),
-            security_score=(
-                int(security.group(1))
-                if security
-                else None
-            ),
-            performance_score=(
-                int(performance.group(1))
-                if performance
-                else None
-            ),
-            production_score=(
-                int(production.group(1))
-                if production
-                else None
-            ),
+            architecture_score=(int(architecture.group(1)) if architecture else None),
+            security_score=(int(security.group(1)) if security else None),
+            performance_score=(int(performance.group(1)) if performance else None),
+            production_score=(int(production.group(1)) if production else None),
             files_count=len(uploaded_files),
-            lines_of_code=len(
-                all_files_content.splitlines()
-            ),
+            lines_of_code=len(all_files_content.splitlines()),
             response_time=response_time,
         )
 
-        return Response({
-            "reply": reply
-        })
+        return Response(
+            {
+                "reply": reply,
+                "incident_data": incident_data,
+            }
+        )
 
     except Exception as e:
-        return Response({
-            "reply": f"Gemini error: {str(e)}"
-        })
+        return Response({"reply": f"Gemini error: {str(e)}"})
