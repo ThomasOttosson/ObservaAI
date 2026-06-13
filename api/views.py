@@ -314,12 +314,8 @@ def chat(request):
             status=503,
         )
 
-    message = request.data.get(
-        "message",
-        "",
-        "analysis_mode",
-        "security",
-    ).strip()
+    message = request.data.get("message", "").strip()
+    analysis_mode = request.data.get("analysis_mode", "security")
 
     uploaded_files = request.FILES.getlist("files")
 
