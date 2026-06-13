@@ -420,7 +420,9 @@ function App() {
         ...prev,
         {
           user: message || `Uploaded ${files.length} file(s)`,
-          assistant: data.reply || "No response received.",
+          assistant: data?.incident_data
+            ? data.incident_data.summary || "Incident analysis completed."
+            : data.reply || "No response received.",
         },
       ]);
 

@@ -389,14 +389,7 @@ FILE: {uploaded_file.name}
         if len(all_files_content) > MAX_CHARS:
             all_files_content = all_files_content[:MAX_CHARS]
 
-        is_log_analysis = (
-            analysis_mode == "security"
-            or any(file.name.lower().endswith(".log") for file in uploaded_files)
-            or "traceback" in all_files_content.lower()
-            or "error" in all_files_content.lower()
-            or "exception" in all_files_content.lower()
-            or "critical" in all_files_content.lower()
-        )
+        is_log_analysis = analysis_mode == "security"
 
         if is_log_analysis:
             prompt = f"""
