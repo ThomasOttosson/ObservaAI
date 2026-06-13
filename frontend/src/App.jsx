@@ -507,6 +507,10 @@ function App() {
   };
 
   const tryDemoIncident = async () => {
+    console.log("TRY DEMO CLICKED");
+    console.log("showDemoIncident:", showDemoIncident);
+    console.log("token:", token);
+
     if (showDemoIncident) {
       setShowDemoIncident(false);
       setIncidentTimeline([]);
@@ -1206,8 +1210,21 @@ function App() {
           ))}
         </div>
       )}
-      <button className="demo-incident-btn" onClick={tryDemoIncident}>
-        {showDemoIncident ? "Hide Demo Incident" : "Try Demo Incident"}
+      <button
+        className="demo-incident-btn"
+        onClick={tryDemoIncident}
+        disabled={loading}
+      >
+        {loading ? (
+          <>
+            <span className="spinner"></span>
+            Analyzing incident...
+          </>
+        ) : showDemoIncident ? (
+          "Hide Demo Incident"
+        ) : (
+          "Try Demo Incident"
+        )}
       </button>
 
       {aiServiceError && (

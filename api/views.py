@@ -576,4 +576,21 @@ For example, use markdown code blocks with language tags such as python, javascr
         )
 
     except Exception as e:
-        return Response({"reply": f"Gemini error: {str(e)}"})
+        error_message = str(e)
+
+        if "429" in error_message or "RESOURCE_EXHAUSTED" in error_message:
+            return Response(
+                {
+                    "reply": "AI quota reached. Please wait a minute and try again.",
+                    "incident_data": None,
+                },
+                status=429,
+            )
+
+        return Response(
+            {
+                "reply": f"Gemini error: {error_message}",
+                "incident_data": None,
+            },
+            status=500,
+        )
