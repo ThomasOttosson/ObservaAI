@@ -356,6 +356,20 @@ function App() {
         return;
       }
 
+      if (response.status === 429) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            user: message || `Uploaded ${files.length} file(s)`,
+            assistant:
+              data.reply ||
+              "AI quota reached. Please wait a minute and try again.",
+          },
+        ]);
+
+        return;
+      }
+
       let incidentData = data?.incident_data;
 
       if (!incidentData && data?.reply) {
@@ -576,6 +590,20 @@ function App() {
             assistant:
               data.reply ||
               "AI service is not configured yet. Please add GEMINI_API_KEY on the backend.",
+          },
+        ]);
+
+        return;
+      }
+
+      if (response.status === 429) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            user: message || `Uploaded ${files.length} file(s)`,
+            assistant:
+              data.reply ||
+              "AI quota reached. Please wait a minute and try again.",
           },
         ]);
 
@@ -1221,9 +1249,9 @@ function App() {
             Analyzing incident...
           </>
         ) : showDemoIncident ? (
-          "Hide Demo Incident"
+          "Hide Analysis"
         ) : (
-          "Try Demo Incident"
+          "Try AI Incident Analysis"
         )}
       </button>
 
