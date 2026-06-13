@@ -342,6 +342,7 @@ function App() {
           data.reply ||
             "AI service is not configured yet. Please add GEMINI_API_KEY on the backend.",
         );
+
         setMessages((prev) => [
           ...prev,
           {
@@ -355,10 +356,34 @@ function App() {
         return;
       }
 
+      let incidentData = data?.incident_data;
+
+      if (!incidentData && data?.reply) {
+        try {
+          let cleanedReply = data.reply.trim();
+
+          if (cleanedReply.startsWith("```json")) {
+            cleanedReply = cleanedReply
+              .replace("```json", "")
+              .replace("```", "")
+              .trim();
+          } else if (cleanedReply.startsWith("```")) {
+            cleanedReply = cleanedReply
+              .replace("```", "")
+              .replace("```", "")
+              .trim();
+          }
+
+          incidentData = JSON.parse(cleanedReply);
+        } catch (error) {
+          incidentData = null;
+        }
+      }
+
       extractScores(data.reply || "");
 
-      if (data?.incident_data) {
-        const incident = data.incident_data;
+      if (incidentData) {
+        const incident = incidentData;
 
         const observability = incident?.incident_scores?.observability ?? 0;
         const reliability = incident?.incident_scores?.reliability ?? 0;
@@ -420,8 +445,8 @@ function App() {
         ...prev,
         {
           user: message || `Uploaded ${files.length} file(s)`,
-          assistant: data?.incident_data
-            ? data.incident_data.summary || "Incident analysis completed."
+          assistant: incidentData
+            ? `Incident analysis completed: ${incidentData.summary || ""}`
             : data.reply || "No response received.",
         },
       ]);
@@ -553,8 +578,32 @@ function App() {
         return;
       }
 
-      if (data?.incident_data) {
-        const incident = data.incident_data;
+      let incidentData = data?.incident_data;
+
+      if (!incidentData && data?.reply) {
+        try {
+          let cleanedReply = data.reply.trim();
+
+          if (cleanedReply.startsWith("```json")) {
+            cleanedReply = cleanedReply
+              .replace("```json", "")
+              .replace("```", "")
+              .trim();
+          } else if (cleanedReply.startsWith("```")) {
+            cleanedReply = cleanedReply
+              .replace("```", "")
+              .replace("```", "")
+              .trim();
+          }
+
+          incidentData = JSON.parse(cleanedReply);
+        } catch (error) {
+          incidentData = null;
+        }
+      }
+
+      if (incidentData) {
+        const incident = incidentData;
 
         setExecutiveSummary(incident?.summary || "");
 
@@ -609,6 +658,14 @@ function App() {
             summary: incident?.summary || "Demo incident analyzed",
           },
           ...prev,
+        ]);
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            user: "Try Demo Incident",
+            assistant: `Incident analysis completed: ${incident.summary || ""}`,
+          },
         ]);
       } else {
         setMessages((prev) => [
