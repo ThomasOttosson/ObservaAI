@@ -507,6 +507,16 @@ List all improvements.
 # Improved Code
 
 Provide code examples if relevant.
+
+IMPORTANT:
+When providing code examples or improved code, ALWAYS wrap the code inside markdown code blocks with the correct language.
+
+Example:
+
+```python
+def example():
+    pass
+```
 """
 
         start_time = time.time()
