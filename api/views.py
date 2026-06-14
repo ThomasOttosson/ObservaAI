@@ -79,8 +79,14 @@ def history(request):
 def stats(request):
     analyses = Analysis.objects.filter(user=request.user)
 
+    code_analyses = analyses.filter(
+        architecture_score__isnull=False,
+        performance_score__isnull=False,
+        production_score__isnull=False,
+    )
+
     analyses_per_day = (
-        Analysis.objects.annotate(day=TruncDate("created_at"))
+        analyses.annotate(day=TruncDate("created_at"))
         .values("day")
         .annotate(total=Count("id"))
         .order_by("day")
@@ -96,8 +102,6 @@ def stats(request):
 
     latest = analyses.order_by("-created_at").first()
 
-    analyses
-
     score_history = [
         {
             "date": analysis.created_at.strftime("%Y-%m-%d"),
@@ -107,12 +111,13 @@ def stats(request):
             "production": analysis.production_score,
             "response_time": analysis.response_time,
         }
-        for analysis in analyses.order_by("created_at")
+        for analysis in code_analyses.order_by("created_at")
     ]
 
     total_count = analyses.count()
+    code_count = code_analyses.count()
 
-    favorite_count = Analysis.objects.filter(favorite=True).count()
+    favorite_count = analyses.filter(favorite=True).count()
 
     total_lines_analyzed = sum(a.lines_of_code or 0 for a in analyses)
 
@@ -127,37 +132,37 @@ def stats(request):
 
     avg_architecture = (
         round(
-            sum(a.architecture_score or 0 for a in analyses) / total_count,
+            sum(a.architecture_score or 0 for a in code_analyses) / code_count,
             1,
         )
-        if total_count
+        if code_count
         else 0
     )
 
     avg_security = (
         round(
-            sum(a.security_score or 0 for a in analyses) / total_count,
+            sum(a.security_score or 0 for a in code_analyses) / code_count,
             1,
         )
-        if total_count
+        if code_count
         else 0
     )
 
     avg_performance = (
         round(
-            sum(a.performance_score or 0 for a in analyses) / total_count,
+            sum(a.performance_score or 0 for a in code_analyses) / code_count,
             1,
         )
-        if total_count
+        if code_count
         else 0
     )
 
     avg_production = (
         round(
-            sum(a.production_score or 0 for a in analyses) / total_count,
+            sum(a.production_score or 0 for a in code_analyses) / code_count,
             1,
         )
-        if total_count
+        if code_count
         else 0
     )
 
@@ -172,7 +177,11 @@ def stats(request):
                 "security": avg_security,
                 "performance": avg_performance,
                 "production": avg_production,
+                "observability": "-",
+                "reliability": "-",
+                "severity": "-",
             },
+            "total_incidents": 0,
             "score_history": score_history,
             "total_lines_analyzed": total_lines_analyzed,
             "avg_response_time": avg_response_time,

@@ -6,8 +6,6 @@ const API_URL =
   import.meta.env.VITE_API_URL ||
   "https://web-production-392e59.up.railway.app";
 
-console.log("API_URL =", API_URL);
-
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import {
@@ -25,8 +23,12 @@ function App() {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [authMode, setAuthMode] = useState("login");
   const [registerError, setRegisterError] = useState("");
+  const [favoriteLoading, setFavoriteLoading] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(null);
   const [aiServiceError, setAiServiceError] = useState("");
   const [registerSuccess, setRegisterSuccess] = useState("");
+  const [demoLoading, setDemoLoading] = useState(false);
+  const [exportLoading, setExportLoading] = useState(null);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
   const [username, setUsername] = useState("");
@@ -59,10 +61,6 @@ function App() {
   });
 
   useEffect(() => {
-    console.log("TOKEN CHANGED:", token);
-  }, [token]);
-
-  useEffect(() => {
     localStorage.setItem("incidentHistory", JSON.stringify(incidentHistory));
   }, [incidentHistory]);
 
@@ -74,8 +72,6 @@ function App() {
       severity: "N/A",
     }));
   }, []);
-
-  console.log("TOKEN:", token);
 
   const [stats, setStats] = useState({
     total_analyses: 0,
@@ -193,6 +189,8 @@ function App() {
 
   const deleteAnalysis = async (id) => {
     try {
+      setDeleteLoading(id);
+
       await fetch(`${API_URL}/api/delete/${id}/`, {
         method: "DELETE",
         headers: {
@@ -200,25 +198,54 @@ function App() {
         },
       });
 
-      loadHistory();
-      loadStats();
+      setHistory((prev) => prev.filter((item) => item.id !== id));
+
+      await loadStats();
     } catch (error) {
       console.error(error);
+    } finally {
+      setDeleteLoading(null);
+    }
+  };
+
+  const exportAnalysis = async (id) => {
+    try {
+      setExportLoading(id);
+
+      window.open(`${API_URL}/api/export/${id}/`, "_blank");
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setTimeout(() => {
+        setExportLoading(null);
+      }, 1000);
     }
   };
 
   const toggleFavorite = async (id) => {
     try {
-      await fetch(`${API_URL}/api/favorite/${id}/`, {
+      setFavoriteLoading(id);
+
+      const response = await fetch(`${API_URL}/api/favorite/${id}/`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
 
-      loadHistory();
+      const data = await response.json();
+
+      setHistory((prev) =>
+        prev.map((item) =>
+          item.id === id ? { ...item, favorite: data.favorite } : item,
+        ),
+      );
+
+      await loadStats();
     } catch (error) {
       console.error(error);
+    } finally {
+      setFavoriteLoading(null);
     }
   };
 
@@ -255,9 +282,6 @@ function App() {
 
   const login = async () => {
     try {
-      console.log("USERNAME VALUE:", username);
-      console.log("PASSWORD VALUE:", password);
-
       const response = await fetch(`${API_URL}/api/token/`, {
         method: "POST",
         headers: {
@@ -269,18 +293,10 @@ function App() {
         }),
       });
 
-      console.log("STATUS:", response.status);
-
       const data = await response.json();
 
-      console.log("DATA:", data);
-
       if (data.access) {
-        console.log("ACCESS TOKEN RECEIVED");
-
         localStorage.setItem("token", data.access);
-
-        console.log("LOCALSTORAGE TOKEN:", localStorage.getItem("token"));
 
         setToken(data.access);
 
@@ -521,10 +537,6 @@ function App() {
   };
 
   const tryDemoIncident = async () => {
-    console.log("TRY DEMO CLICKED");
-    console.log("showDemoIncident:", showDemoIncident);
-    console.log("token:", token);
-
     if (showDemoIncident) {
       setShowDemoIncident(false);
       setIncidentTimeline([]);
@@ -557,13 +569,13 @@ function App() {
 
     setShowDemoIncident(true);
     setMessage(demoLogs);
-    setLoading(true);
+    setDemoLoading(true);
 
     try {
       const formData = new FormData();
 
       formData.append("message", demoLogs);
-      formData.append("analysis_mode", "security");
+      formData.append("analysis_mode", analysisMode);
 
       const response = await fetch(`${API_URL}/api/chat/`, {
         method: "POST",
@@ -722,7 +734,7 @@ function App() {
         },
       ]);
     } finally {
-      setLoading(false);
+      setDemoLoading(false);
     }
   };
 
@@ -781,55 +793,86 @@ function App() {
       {username && <h3>Logged in as: {username}</h3>}
 
       <div className="stats-panel">
+        <h2 className="dashboard-section-title">Code Review Stats</h2>
+
         <div className="score-board">
           <div className="score-card">
             <h3>Avg Architecture</h3>
-            <h2>{stats.average_scores?.architecture}</h2>
+            <h2>{stats.average_scores?.architecture ?? "-"}</h2>
           </div>
 
           <div className="score-card">
             <h3>Avg Security</h3>
-            <h2>{stats.average_scores?.security}</h2>
+            <h2>{stats.average_scores?.security ?? "-"}</h2>
           </div>
 
           <div className="score-card">
             <h3>Avg Performance</h3>
-            <h2>{stats.average_scores?.performance}</h2>
+            <h2>{stats.average_scores?.performance ?? "-"}</h2>
           </div>
 
           <div className="score-card">
             <h3>Avg Production</h3>
-            <h2>{stats.average_scores?.production}</h2>
+            <h2>{stats.average_scores?.production ?? "-"}</h2>
           </div>
         </div>
-        <div className="stat-card">
-          <h3>Total Analyses</h3>
-          <h2>{stats.total_analyses}</h2>
+
+        <h2 className="dashboard-section-title">Incident Analysis Stats</h2>
+
+        <div className="score-board">
+          <div className="score-card">
+            <h3>Avg Observability</h3>
+            <h2>{stats.average_scores?.observability ?? "-"}</h2>
+          </div>
+
+          <div className="score-card">
+            <h3>Avg Reliability</h3>
+            <h2>{stats.average_scores?.reliability ?? "-"}</h2>
+          </div>
+
+          <div className="score-card">
+            <h3>Most Common Severity</h3>
+            <h2>{stats.average_scores?.severity ?? "-"}</h2>
+          </div>
+
+          <div className="score-card">
+            <h3>Total Incidents</h3>
+            <h2>{stats.total_incidents ?? 0}</h2>
+          </div>
         </div>
 
-        <div className="stat-card">
-          <h3>Favorite Analyses</h3>
-          <h2>{stats.favorite_analyses}</h2>
-        </div>
+        <h2 className="dashboard-section-title">General Stats</h2>
 
-        <div className="stat-card">
-          <h3>Latest Analysis</h3>
+        <div className="score-board">
+          <div className="stat-card">
+            <h3>Total Analyses</h3>
+            <h2>{stats.total_analyses}</h2>
+          </div>
 
-          <p>
-            {stats.latest_analysis
-              ? new Date(stats.latest_analysis).toLocaleString()
-              : "No analyses yet"}
-          </p>
-        </div>
+          <div className="stat-card">
+            <h3>Favorite Analyses</h3>
+            <h2>{stats.favorite_analyses}</h2>
+          </div>
 
-        <div className="stat-card">
-          <h3>Total Lines Analyzed</h3>
-          <h2>{stats.total_lines_analyzed}</h2>
-        </div>
+          <div className="stat-card">
+            <h3>Latest Analysis</h3>
 
-        <div className="stat-card">
-          <h3>Avg Response Time</h3>
-          <h2>{stats.avg_response_time}s</h2>
+            <p>
+              {stats.latest_analysis
+                ? new Date(stats.latest_analysis).toLocaleString()
+                : "No analyses yet"}
+            </p>
+          </div>
+
+          <div className="stat-card">
+            <h3>Total Lines Analyzed</h3>
+            <h2>{stats.total_lines_analyzed}</h2>
+          </div>
+
+          <div className="stat-card">
+            <h3>Avg Response Time</h3>
+            <h2>{stats.avg_response_time}s</h2>
+          </div>
         </div>
       </div>
 
@@ -912,7 +955,15 @@ function App() {
       <div className="history-panel">
         <h3>History</h3>
 
-        {history.length === 0 && <p>No previous analyses.</p>}
+        {history.length === 0 && (
+          <div className="empty-history">
+            <h3>No analyses yet</h3>
+
+            <p>
+              Upload code, logs, or run an AI incident analysis to get started.
+            </p>
+          </div>
+        )}
 
         {history
           .filter((item) =>
@@ -920,8 +971,9 @@ function App() {
           )
           .filter((item) => (showFavoritesOnly ? item.favorite : true))
           .map((item) => (
-            <div key={item.id} className="history-item">
+            <div key={item.id} className="history-card">
               <div
+                className="history-card-content"
                 onClick={() => {
                   extractScores(item.response || "");
 
@@ -932,39 +984,68 @@ function App() {
                     },
                   ]);
                 }}
-                style={{
-                  cursor: "pointer",
-                  marginBottom: "10px",
-                }}
               >
-                {item.prompt}
+                <div className="history-card-header">
+                  <strong>{item.favorite ? "⭐ Favorite" : "Analysis"}</strong>
+
+                  <small>
+                    {item.created_at
+                      ? new Date(item.created_at).toLocaleString()
+                      : ""}
+                  </small>
+                </div>
+
+                <p className="history-prompt">
+                  {item.prompt.length > 120
+                    ? `${item.prompt.slice(0, 120)}...`
+                    : item.prompt}
+                </p>
+
+                <div className="history-scores">
+                  <span>Architecture: {item.architecture_score ?? "-"}/10</span>
+                  <span>Security: {item.security_score ?? "-"}/10</span>
+                  <span>Performance: {item.performance_score ?? "-"}/10</span>
+                  <span>Production: {item.production_score ?? "-"}/10</span>
+                </div>
               </div>
 
-              <button
-                onClick={() => {
-                  window.open(`${API_URL}/api/export/${item.id}/`, "_blank");
-                }}
-              >
-                Export PDF
-              </button>
+              <div className="history-actions">
+                <button
+                  className="export-history-btn"
+                  disabled={exportLoading === item.id}
+                  onClick={() => exportAnalysis(item.id)}
+                >
+                  {exportLoading === item.id ? "Opening..." : "Export PDF"}
+                </button>
 
-              <button onClick={() => toggleFavorite(item.id)}>
-                {item.favorite ? "⭐" : "☆"}
-              </button>
+                <button
+                  className="favorite-btn"
+                  onClick={() => toggleFavorite(item.id)}
+                  disabled={favoriteLoading === item.id}
+                >
+                  {favoriteLoading === item.id
+                    ? "..."
+                    : item.favorite
+                      ? "⭐"
+                      : "☆"}
+                </button>
 
-              <button
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      "Are you sure you want to delete this analysis?",
-                    )
-                  ) {
-                    deleteAnalysis(item.id);
-                  }
-                }}
-              >
-                Delete
-              </button>
+                <button
+                  className="delete-history-btn"
+                  disabled={deleteLoading === item.id}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "Are you sure you want to delete this analysis?",
+                      )
+                    ) {
+                      deleteAnalysis(item.id);
+                    }
+                  }}
+                >
+                  {deleteLoading === item.id ? "Deleting..." : "Delete"}
+                </button>
+              </div>
             </div>
           ))}
       </div>
@@ -1241,9 +1322,9 @@ function App() {
       <button
         className="demo-incident-btn"
         onClick={tryDemoIncident}
-        disabled={loading}
+        disabled={demoLoading}
       >
-        {loading ? (
+        {demoLoading ? (
           <>
             <span className="spinner"></span>
             Analyzing incident...
@@ -1474,6 +1555,13 @@ function App() {
           </div>
         </div>
       )}
+      <footer className="footer">
+        <h3>ObservaAI</h3>
+
+        <p>AI-powered Security & Observability Analysis</p>
+
+        <small>Built with React, Django, PostgreSQL & Gemini</small>
+      </footer>
     </div>
   );
 }
