@@ -406,6 +406,14 @@ You are a senior Site Reliability Engineer and Splunk Incident Analyst.
 
 Analyze the following logs and return ONLY valid JSON.
 
+IMPORTANT:
+
+observability must be an integer between 0 and 10
+security must be an integer between 0 and 10
+reliability must be an integer between 0 and 10
+
+Do NOT return values above 10.
+
 User Message:
 {message}
 

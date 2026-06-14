@@ -418,9 +418,12 @@ function App() {
         const observability = incident?.incident_scores?.observability ?? 0;
         const reliability = incident?.incident_scores?.reliability ?? 0;
         const security = incident?.incident_scores?.security ?? 0;
+        const safeObservability = Math.min(observability, 10);
+        const safeReliability = Math.min(reliability, 10);
+        const safeSecurity = Math.min(security, 10);
 
         const healthScore = Math.round(
-          ((observability + reliability + security) / 30) * 100,
+          ((safeObservability + safeReliability + safeSecurity) / 30) * 100,
         );
 
         setIncidentHealthScore(healthScore);
@@ -1051,40 +1054,48 @@ function App() {
       </div>
 
       {messages.length > 0 && (
-        <div className="score-board">
-          <div className="score-card">
-            <h3>Architecture</h3>
-            <h2>{scores.architecture}/10</h2>
-          </div>
+        <div className="current-analysis-section">
+          <h2 className="dashboard-section-title">Current Analysis</h2>
 
-          <div className="score-card">
-            <h3>Security</h3>
-            <h2>{scores.security}/10</h2>
-          </div>
+          <div className="score-board">
+            <div className="score-card">
+              <h3>Architecture</h3>
+              <h2>{scores.architecture}/10</h2>
+            </div>
 
-          <div className="score-card">
-            <h3>Performance</h3>
-            <h2>{scores.performance}/10</h2>
-          </div>
+            <div className="score-card">
+              <h3>Security</h3>
+              <h2>{scores.security}/10</h2>
+            </div>
 
-          <div className="score-card">
-            <h3>Production</h3>
-            <h2>{scores.production}/10</h2>
-          </div>
+            <div className="score-card">
+              <h3>Performance</h3>
+              <h2>{scores.performance}/10</h2>
+            </div>
 
-          <div className="score-card">
-            <h3>Observability</h3>
-            <h2>{scores.observability}</h2>
-          </div>
+            <div className="score-card">
+              <h3>Production</h3>
+              <h2>{scores.production}/10</h2>
+            </div>
 
-          <div className="score-card">
-            <h3>Reliability</h3>
-            <h2>{scores.reliability}</h2>
-          </div>
+            {analysisMode === "security" && (
+              <>
+                <div className="score-card">
+                  <h3>Observability</h3>
+                  <h2>{scores.observability}</h2>
+                </div>
 
-          <div className="score-card">
-            <h3>Severity</h3>
-            <h2>{scores.severity}</h2>
+                <div className="score-card">
+                  <h3>Reliability</h3>
+                  <h2>{scores.reliability}</h2>
+                </div>
+
+                <div className="score-card">
+                  <h3>Severity</h3>
+                  <h2>{scores.severity}</h2>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -1399,7 +1410,7 @@ function App() {
           onDrop={handleDrop}
         >
           <p>Drag and drop files here</p>
-          <span>Accepted: .py, .txt, .zip</span>
+          <span>Accepted: .py, .txt, .zip, .log</span>
 
           <input
             type="file"
